@@ -24,9 +24,11 @@ class PlayerViewController: UIViewController {
 
     var artistLabel: UILabel!
     var titleLabel: UILabel!
-    var didPlay: [Track]!
+    var didPlay: [Track]!   //didPlay a given track - what is the benefit of this...
 
-    var paused = true
+    var paused = true   //paused?
+    private var playerItemContext = 0
+    var nowLoaded: Int?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -39,6 +41,7 @@ class PlayerViewController: UIViewController {
         currentIndex = 0
 
         player = AVQueuePlayer()
+        player.actionAtItemEnd = .pause
 
         loadVisualElements()
         loadPlayerButtons()
@@ -134,7 +137,44 @@ class PlayerViewController: UIViewController {
         let clientID = NSDictionary(contentsOfFile: path!)?.value(forKey: "client_id") as! String
         let track = tracks[currentIndex]
         let url = URL(string: "https://api.soundcloud.com/tracks/\(track.id as Int)/stream?client_id=\(clientID)")!
+            // swap out button image
+        if (sender == playPauseButton) {
+            sender.isSelected = !sender.isSelected
+        }
+
+        
         // FILL ME IN
+        if (paused) {
+            // swap out button image
+            let song = AVPlayerItem(url: url)
+            if (currentIndex == nowLoaded) {
+                player.play()
+            } else {
+                player.removeAllItems()
+                if player.canInsert(song, after: nil) {
+                    player.insert(song, after: nil)
+                    player.currentItem!.addObserver(self,
+                                                    forKeyPath: #keyPath(AVPlayerItem.status),
+                                                    options: [.old, .new],
+                                                    context: &playerItemContext)
+                    nowLoaded = currentIndex
+                    
+                }
+            }
+            
+            
+            print(player.items())
+            print(tracks) //7 tracks
+            // play track
+            
+
+        } else {
+            // pause track
+            player.pause()
+
+        
+        }
+        paused = !paused
 
     }
 
@@ -145,7 +185,18 @@ class PlayerViewController: UIViewController {
      * Remember to update the currentIndex
      */
     func nextTrackTapped(_ sender: UIButton) {
-        // FILL ME IN
+        //if next track
+        if (currentIndex + 1 < tracks.count) {
+            currentIndex = currentIndex + 1
+            loadTrackElements()
+            if (!paused) {
+                paused = true;
+                playOrPauseTrack(sender)
+            }
+            
+            
+        }
+        
     }
 
     /*
@@ -159,7 +210,24 @@ class PlayerViewController: UIViewController {
      */
 
     func previousTrackTapped(_ sender: UIButton) {
-        // FILL ME IN
+        if (currentIndex != nowLoaded || CMTimeGetSeconds((player.currentItem?.currentTime())!) < 3) {
+        
+        
+            //if next track
+            if (currentIndex - 1 >= 0) {
+                currentIndex = currentIndex - 1
+                loadTrackElements()
+                if (!paused) {
+                    paused = true;
+                    playOrPauseTrack(sender)
+                }
+                
+                
+            }
+        } else {
+            let zero: Float64 = 0;
+            player.currentItem?.seek(to: CMTimeMakeWithSeconds(0, 1))
+        }
     }
 
 
@@ -184,5 +252,47 @@ class PlayerViewController: UIViewController {
         self.tracks = tracks
         loadTrackElements()
     }
+    
+    override func observeValue(forKeyPath keyPath: String?,
+                               of object: Any?,
+                               change: [NSKeyValueChangeKey : Any]?,
+                               context: UnsafeMutableRawPointer?) {
+        // Only handle observations for the playerItemContext
+        guard context == &playerItemContext else {
+            super.observeValue(forKeyPath: keyPath,
+                               of: object,
+                               change: change,
+                               context: context)
+            return
+        }
+        
+        if keyPath == #keyPath(AVPlayerItem.status) {
+            let status: AVPlayerItemStatus
+            
+            // Get the status change from the change dictionary
+            if let statusNumber = change?[.newKey] as? NSNumber {
+                status = AVPlayerItemStatus(rawValue: statusNumber.intValue)!
+            } else {
+                status = .unknown
+            }
+            
+            // Switch over the status
+            switch status {
+            case .readyToPlay:
+            // Player item is ready to play.
+                player.play()
+                player.currentItem?.removeObserver(self, forKeyPath: #keyPath(AVPlayerItem.status),
+                                                   context: &playerItemContext)
+            case .failed:
+            // Player item failed. See error.
+                print("error")
+            case .unknown:
+                // Player item is not yet ready.
+                print("unknown")
+            }
+        }
+    }
+    
+    
 }
 
